@@ -18,6 +18,7 @@ import platform
 import stat
 import sys
 import urlparse
+import time
 
 import M2Crypto
 import certifi
@@ -204,19 +205,28 @@ class OktaAPIAuth:
 
             res = None
             for factor in rv['_embedded']['factors']:
-                if factor['factorType'] != "token:software:totp":
+                if (factor['factorType'] == "token:software:totp") or (factor['factorType'] == "push"):
+                    fid = factor['id']
+                    state_token = rv['stateToken']
+                    try:
+                        res = self.doauth(fid, state_token)
+                        mfa_check_count = 0
+                        while res['status'] == "MFA_CHALLENGE" and res['factorResult'] == "WAITING":
+                            res = self.doauth(fid, state_token)
+                            mfa_check_count += 1
+                            if mfa_check_count > 20:
+                                log.info('User %s MFA_CHALLENGE timed out' % self.username)
+                                return False
+                            time.sleep(2)
+                    except Exception, s:
+                        log.error('Unexpected error with the Okta API: %s' % (s))
+                        return False
+                    if 'status' in res and res['status'] == 'SUCCESS':
+                        log.info(("User %s is now authenticated "
+                                  "with MFA via Okta API") % self.username)
+                        return True
+                else:
                     continue
-                fid = factor['id']
-                state_token = rv['stateToken']
-                try:
-                    res = self.doauth(fid, state_token)
-                except Exception, s:
-                    log.error('Unexpected error with the Okta API: %s' % (s))
-                    return False
-                if 'status' in res and res['status'] == 'SUCCESS':
-                    log.info(("User %s is now authenticated "
-                              "with MFA via Okta API") % self.username)
-                    return True
 
             if 'errorCauses' in res:
                 msg = res['errorCauses'][0]['errorSummary']
