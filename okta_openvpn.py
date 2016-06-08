@@ -211,7 +211,7 @@ class OktaAPIAuth:
                     try:
                         res = self.doauth(fid, state_token)
                         mfa_check_count = 0
-                        while res['status'] == "MFA_CHALLENGE" and res['factorResult'] == "WAITING":
+                        while 'status' in res and res['status'] == "MFA_CHALLENGE" and res['factorResult'] == "WAITING":
                             res = self.doauth(fid, state_token)
                             mfa_check_count += 1
                             if mfa_check_count > 20:
